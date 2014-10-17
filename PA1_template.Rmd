@@ -1,25 +1,126 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+author: "Bart Decaigny"
+date: "Wednesday, October 15, 2014"
+output: html_document
+keep_md: true
 ---
 
 
 ## Loading and preprocessing the data
 
-
+The goal of this assignment is to analyse data from personal movement
+activity, in this case, the number of steps taken by an anonymous individual
+over the course of two months, measured in five minute intervals.
+```{r, echo = FALSE}
+## the csv is in a zip file, let's read it from there
+activity <- read.csv(unz("activity.zip","activity.csv"))
+```
 
 ## What is mean total number of steps taken per day?
+But before there's anything we can do, we need to load the data, remove NA 
+values, clean up, aggregate... to be able to show an overview of the steps 
+taken per day:  
+```{r, echo = FALSE}
+##Cleaning out all NA values
+complete <- complete.cases(activity)
+data <- activity[complete, ]
+##summarize per date..
+aggregated <- aggregate(data$steps, list(data$date), sum)
+## .. and give summarised data user-friendly names
+colnames(aggregated) <- c("date","steps")
+## not sure if needed: reprocessing date field
+data$date <- strptime(data$date, "%Y-%m-%d")
+hist(aggregated$steps, 
+     main="Total number of steps taken per day", 
+     xlab="Total steps per day")
+```
 
+The mean and average of steps taken per day can also be calculated:  
+```{r, echo=F}
+summary(aggregated$steps)
+```
 
 
 ## What is the average daily activity pattern?
+Instead of summarizig per day, we could also calculate the average number of 
+steps taken per 5-minutes interval, and plot it out:
+```{r, echo=FALSE}
+interval <- aggregate(data$steps, list(data$interval), mean)
+colnames(interval) <- c("interval","avg_steps")
+plot(interval$interval, interval$avg_steps, type="l", 
+     xlab="interval (as hhmm)", 
+     ylab="Average number of steps")
+```
 
+We can see that the max number of steps taken is 206, at 8:35 AM, when ordering
+the intervals by average steps (only top 5 shown):
+```{r, echo=FALSE}
+head(interval[order(interval$avg_steps,decreasing=TRUE),],5)
+```
 
 
 ## Imputing missing values
+```{r, echo=FALSE}
+total_NA <- summary(activity[is.na(activity$steps),]$steps)["NA's"]
+row_tot <- nrow(activity)
+```
+As mentioned earlier, these calculations use the cleaned up data set, i.e. with
+the NA rows removed. In the original table, there are  `r total_NA` NA rows on 
+a total of `r row_tot` rows. In stead of working with reduced data set as with 
+did thusfar, we could also choose to replace the missing values with calculated 
+data, e.g. the average number of steps for that time interval, or for that date.
+As we see quite a strong pattern in the average steps per interval, we prefer to
+replace the NA values with the interval means.
 
+Let's check what the impact is on the total number of steps per day resp. on 
+the average steps per day.  
+```{r, echo=FALSE}
+merged <- merge(activity, interval, by.x="interval", by.y="interval")
+merged[is.na(merged$steps),]$steps <- round(merged[is.na(merged$steps),]$avg_steps,0)
+merged$avg_steps <- NULL
+aggregated2 <- aggregate(merged$steps, list(merged$date), sum)
+colnames(aggregated2) <- c("date","steps")
+hist(aggregated2$steps, 
+     main="Total number of steps taken per day", 
+     xlab="Total steps per day")
+```
+
+The mean and average of steps taken per day can also be recalculated:  
+```{r, echo=F}
+summary(aggregated2$steps)
+```
+We can conclude that replacing the NAs with interval means has an impact on 
+the quantile boundaries, but not on the mean or the median. When we recreate a 
+plot for the average number of plots per interval, we see there is no impact either.  
+```{r, echo=FALSE}
+interval2 <- aggregate(merged$steps, list(merged$interval), mean)
+colnames(interval2) <- c("interval","avg_steps")
+plot(interval2$interval, interval2$avg_steps, 
+     type="l", 
+     xlab="interval (as hhmm)", 
+     ylab="Average number of steps")
+```
+
+This was expected, of course, as we replaced the missing values with the averages 
+already used in the plot.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+A last question we can ask ourselves, is wether there is a differences between steps taken on weekdays versus weekend. Let's put this in a plot.
+```{r, echo=FALSE, results='hide'}
+Sys.setlocale("LC_TIME","C")
+```
+```{r, echo=FALSE, results='markup', fig.height=8}
+merged$dow <- weekdays(as.Date(merged$date))
+saturday <- merged$dow == "Saturday"
+sunday <- merged$dow == "Sunday"
+weekend <- saturday + sunday
+merged$weekend <- factor(weekend)
+par(mfrow=c(2,1))
+with(subset(merged, weekend == "1"), plot( interval, steps,type="l", main="weekend"))
+with(subset(merged, weekend == "0"), plot(interval, steps,type="l", main="weekdays"))
+```  
+  
+  
+  As could be expected, the activity kicks in quite a few hours later in the weekend, and peaks in the late afternoon, instead of in the morning.
